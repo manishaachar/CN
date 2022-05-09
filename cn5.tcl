@@ -1,37 +1,92 @@
-set val(stop) 10.0 ;
+#===================================
+#     Simulation parameters setup
+#===================================
+set val(stop)   10.0                         ;# time of simulation end
+
+#===================================
+#        Initialization        
+#===================================
+#Create a ns simulator
 set ns [new Simulator]
-set tracefile [open p1.tr w]
+
+#Open the NS trace file
+set tracefile [open out.tr w]
 $ns trace-all $tracefile
-set namfile [open p1.nam w]
+
+#Open the NAM trace file
+set namfile [open out.nam w]
 $ns namtrace-all $namfile
-proc finish {} {
-global ns tracefile namfile
-$ns flush-trace
-close $tracefile
-close $namfile
-exec nam p1.nam &
-exec awk -f prg1.awk p1.tr&
-exit 0
-}
+
+#===================================
+#        Nodes Definition        
+#===================================
+#Create 4 nodes
 set n0 [$ns node]
 set n1 [$ns node]
 set n2 [$ns node]
-$ns duplex-link $n0 $n1 200Kb 10ms DropTail 
-$ns duplex-link $n1 $n2 20Kb 100ms DropTail
-$ns queue-limit $n0 $n1 10
-set udp1 [new Agent/UDP]
-$ns attach-agent $n0 $udp1
-set null2 [new Agent/Null]
-$ns attach-agent $n2 $null2
-$ns connect $udp1 $null2
-$udp1 set packetSize_ 1000
-set cbr1 [new Application/Traffic/CBR]
-$cbr1 attach-agent $udp1
-$cbr1 set packetSize_ 500
-$cbr1 set rate_ 2.0Mb
-$cbr1 set interval_ 0.005
-$ns at 0.1 "$cbr1 start"
-$ns at 0.9 "$cbr1 stop"
-$ns at 1.0 "finish"
+set n3 [$ns node]
+
+#===================================
+#        Links Definition        
+#===================================
+#Createlinks between nodes
+$ns duplex-link $n2 $n0 1.0Mb 10ms DropTail
+$ns queue-limit $n2 $n0 50
+$ns duplex-link $n2 $n1 1.0Mb 10ms DropTail
+$ns queue-limit $n2 $n1 50
+$ns duplex-link $n2 $n3 1.0Mb 10ms DropTail
+$ns queue-limit $n2 $n3 50
+
+#Give node position (for NAM)
+$ns duplex-link-op $n2 $n0 orient left-up
+$ns duplex-link-op $n2 $n1 orient right-up
+$ns duplex-link-op $n2 $n3 orient left-down
+
+#===================================
+#        Agents Definition        
+#===================================
+set tcp1 [new Agent/TCP]
+$ns attach-agent $n0 $tcp1
+set tcp2 [new Agent/TCP]
+$ns attach-agent $n1 $tcp2
+set sink1 [new Agent/TCPSink]
+$ns attach-agent $n3 $sink1
+$ns connect $tcp1 $sink1
+set sink2 [new Agent/TCPSink]
+$ns attach-agent $n3 $sink2
+$ns connect $tcp2 $sink2
+
+
+#===================================
+#        Applications Definition        
+#===================================
+#Setup a FTP Application over TCP connection
+set ftp0 [new Application/FTP]
+$ftp0 attach-agent $tcp1
+$ns at 0.5 "$ftp0 start"
+$ns at 2.0 "$ftp0 stop"
+
+set telnet [new Application/Telnet]
+$telnet set interval_ 0.005
+$telnet attach-agent $tcp2
+$ns at 0.75 "$telnet start"
+$ns at 4.0 "$telnet stop"
+
+
+#===================================
+#        Termination        
+#===================================
+#Define a 'finish' procedure
+proc finish {} {
+    global ns tracefile namfile
+    $ns flush-trace
+    close $tracefile
+    close $namfile
+    exec nam out.nam &
+    exit 0
+}
+$ns at $val(stop) "$ns nam-end-wireless $val(stop)"
+$ns at $val(stop) "finish"
+$ns at $val(stop) "puts \"done\" ; $ns halt"
 $ns run
 
